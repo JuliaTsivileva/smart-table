@@ -1,93 +1,110 @@
-import './fonts/ys-display/fonts.css'
-import './style.css'
+import "./fonts/ys-display/fonts.css";
+import "./style.css";
 
-import {data as sourceData} from "./data/dataset_1.js";
+import { data as sourceData } from "./data/dataset_1.js";
 
-import {initData} from "./data.js";
-import {processFormData} from "./lib/utils.js";
+import { initData } from "./data.js";
+import { processFormData } from "./lib/utils.js";
 // @todo: подключение
-import {initPagination} from "./components/pagination.js";
+import { initPagination } from "./components/pagination.js";
 // @todo: подключение
-import {initTable} from "./components/table.js";
+import { initTable } from "./components/table.js";
 // @todo: подключение
-import {initSorting} from "./components/sorting.js";
+import { initSorting } from "./components/sorting.js";
 // @todo: подключение
-import {initFiltering} from "./components/filtering.js";
+import { initFiltering } from "./components/filtering.js";
 // @todo: подключение
-import { initSearching } from "./components/searching.js"
-
+import { initSearching } from "./components/searching.js";
 
 // Исходные данные используемые в render()
-const {data, ...indexes} = initData(sourceData);
+const api = initData(sourceData);
 
 /**
  * Сбор и обработка полей из таблицы
  * @returns {Object}
  */
 function collectState() {
-    const state = processFormData(new FormData(sampleTable.container));
-    const rowsPerPage  = parseInt(state.rowsPerPage);
-    const page = parseInt(state.page ?? 1);
+  const state = processFormData(new FormData(sampleTable.container));
+  const rowsPerPage = parseInt(state.rowsPerPage);
+  const page = parseInt(state.page ?? 1);
 
-    return {
-        ...state,
-        rowsPerPage,
-        page
-    };
+  return {
+    ...state,
+    rowsPerPage,
+    page,
+  };
 }
 
 /**
  * Перерисовка состояния таблицы при любых изменениях
  * @param {HTMLButtonElement?} action
  */
-function render(action) {
-    let state = collectState() ; // состояние полей из таблицы
-    let result = [...data]; // копируем для последующего изменения
-    
-    // @todo: использование
-    result = applySearching(result, state, action);
+async function render(action) {
+  let state = collectState(); // состояние полей из таблицы
+  let query = {}; // здесь будут формироваться параметры запроса
 
-    result = applyFiltering(result, state, action); // <-- ДОБАВИЛИ ФИЛЬТРАЦИЮ ПЕРЕД СОРТИРОВКОЙ
+  // @todo: использование
+  query = applySearching(query, state, action);
+  query = applyFiltering(query, state, action);
+  query = applySorting(query, state, action);
 
-    result = applySorting(result, state, action);
+  // Применяем пагинацию до запроса (обновляем query)
+  query = applyPagination(query, state, action);
 
-    result = applyPagination(result, state, action);
+  // Запрашиваем данные с собранными параметрами
+  const { total, items } = await api.getRecords(query);
 
-    sampleTable.render(result)
+  // Перерисовываем пагинатор после получения данных
+  updatePagination(total, query);
+
+  sampleTable.render(items);
 }
 
-const sampleTable = initTable({
-    tableTemplate: 'table',
-    rowTemplate: 'row',
-    before: ['search', 'header', 'filter'],
-    after: ['pagination']
-}, render);
+const sampleTable = initTable(
+  {
+    tableTemplate: "table",
+    rowTemplate: "row",
+    before: ["search", "header", "filter"],
+    after: ["pagination"],
+  },
+  render,
+);
 
 // @todo: инициализация
-const applyPagination = initPagination(
-    sampleTable.pagination.elements,             // передаём сюда элементы пагинации, найденные в шаблоне
-    (el, page, isCurrent) => {                    // и колбэк, чтобы заполнять кнопки страниц данными
-        const input = el.querySelector('input');
-        const label = el.querySelector('span');
-        input.value = page;
-        input.checked = isCurrent;
-        label.textContent = page;
-        return el;
-    }
+const { applyPagination, updatePagination } = initPagination(
+  sampleTable.pagination.elements, // передаём сюда элементы пагинации, найденные в шаблоне
+  (el, page, isCurrent) => {
+    // и колбэк, чтобы заполнять кнопки страниц данными
+    const input = el.querySelector("input");
+    const label = el.querySelector("span");
+    input.value = page;
+    input.checked = isCurrent;
+    label.textContent = page;
+    return el;
+  },
 );
 
 const applySorting = initSorting([
-    sampleTable.header.elements.sortByDate,
-    sampleTable.header.elements.sortByTotal
+  sampleTable.header.elements.sortByDate,
+  sampleTable.header.elements.sortByTotal,
 ]);
 
-const applyFiltering = initFiltering(sampleTable.filter.elements, {
-    searchBySeller: indexes.sellers
-});
+const { applyFiltering, updateIndexes } = initFiltering(
+  sampleTable.filter.elements,
+);
 
-const applySearching = initSearching('search');
+const applySearching = initSearching("search");
 
-const appRoot = document.querySelector('#app');
+const appRoot = document.querySelector("#app");
 appRoot.appendChild(sampleTable.container);
 
-render();
+// Инициализация приложения
+async function init() {
+  const indexes = await api.getIndexes();
+  updateIndexes(sampleTable.filter.elements, {
+    searchBySeller: indexes.sellers,
+  });
+}
+
+// Запуск инициализации, а затем рендера первой страницы
+init().then(render);
