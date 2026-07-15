@@ -16,8 +16,8 @@ import { initFiltering } from "./components/filtering.js";
 // @todo: подключение
 import { initSearching } from "./components/searching.js";
 
-// Исходные данные используемые в render()
-const api = initData(sourceData);
+// вызов функции инициализации данны
+const api = initData();
 
 /**
  * Сбор и обработка полей из таблицы
